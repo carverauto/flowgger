@@ -6,10 +6,10 @@ use {
     super::Output,
     crate::flowgger::{config::Config, merger::Merger},
     async_nats::{jetstream, Client},
-    async_nats::jetstream::{stream::StorageType, context::PublishAckFuture},
+    async_nats::jetstream::{context::PublishAckFuture, stream::StorageType},
     std::{
         path::PathBuf,
-        sync::{Arc, Mutex, mpsc::Receiver},
+        sync::{mpsc::Receiver, Arc, Mutex},
         thread,
         time::Duration,
     },
@@ -84,16 +84,14 @@ impl NatsWorker {
         let client = async_nats::connect(self.cfg.url.clone()).await?;
         let js     = jetstream::new(client.clone());
 
-        // Idempotent stream creation (noop if it already exists).
-        let _ = js.create_stream(jetstream::stream::Config {
+        // Ensure the target stream exists.
+        let stream_config = jetstream::stream::Config {
             name:     self.cfg.stream.clone(),
             subjects: vec![self.cfg.subject.clone()],
             storage:  StorageType::File,
             ..Default::default()
-        }).await.or_else(|e| {
-            let _ = js.create_stream(stream_config.clone()).await;
-            // if e.kind() == jetstream::stream::ErrorKind::AlreadyExists { Ok(()) } else { Err(e) }
-        })?;
+        };
+        let _ = js.get_or_create_stream(stream_config).await?;
 
         Ok((client, js))
     }
@@ -111,7 +109,9 @@ impl NatsWorker {
             if let Some(m) = &self.merger { m.frame(&mut bytes); }
 
             // Fire-and-wait-for-ack with timeout so we can log failures.
-            let ack: PublishAckFuture = js.publish(&self.cfg.subject, bytes.into()).await
+            let ack: PublishAckFuture = js
+                .publish(self.cfg.subject.clone(), bytes.into())
+                .await
                 .expect("publish failed");
             if timeout(self.cfg.timeout, ack).await.is_err() {
                 eprintln!("NATS ack timed-out after {:?}", self.cfg.timeout);
