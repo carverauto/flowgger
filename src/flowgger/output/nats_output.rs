@@ -76,13 +76,27 @@ struct NatsWorker {
     merger: Option<Box<dyn Merger + Send>>,
 }
 
+use async_nats::{jetstream, Client, ConnectOptions, PublishAckFuture, stream::StorageType};
+
 #[cfg(feature = "nats-output")]
 impl NatsWorker {
     async fn connect(&self) -> Result<(Client, jetstream::Context), async_nats::Error> {
-        // NB: async-nats automatically negotiates TLS if the URI is nats**s**://
-        // If users need client-cert auth they can pass the custom ConnectOptions here.
-        let client = async_nats::connect(self.cfg.url.clone()).await?;
-        let js     = jetstream::new(client.clone());
+        // Start with default connect options.
+        let mut options = ConnectOptions::new();
+
+        // Apply CA file if provided, to verify the server's certificate.
+        if let Some(ca_file) = &self.cfg.tls_ca {
+            options = options.add_root_certificate(ca_file.clone());
+        }
+
+        // Apply client certificate and key for mTLS client authentication.
+        if let (Some(cert_file), Some(key_file)) = (&self.cfg.tls_cert, &self.cfg.tls_key) {
+            options = options.client_cert(cert_file.clone(), key_file.clone());
+        }
+
+        // Connect to the server using the constructed options.
+        let client = options.connect(&self.cfg.url).await?;
+        let js = jetstream::new(client.clone());
 
         // Ensure the target stream exists.
         let stream_config = jetstream::stream::Config {
