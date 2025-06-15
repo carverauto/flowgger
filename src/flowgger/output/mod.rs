@@ -7,6 +7,7 @@ mod kafka_output;
 mod tls_output;
 #[cfg(feature = "nats-output")]
 mod nats_output;
+mod test_nats_output;
 
 #[cfg(feature = "nats-output")]
 pub use self::nats_output::NatsOutput;
