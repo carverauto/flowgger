@@ -112,6 +112,13 @@ file_rotation_timeformat = "[year][month][day]T[hour][minute][second]Z"
 # kafka_acks = 0
 # kafka_compression = "none"
 
+### NATS output
+nats_url    = "nats://127.0.0.1:4222"
+nats_subject = "logs.app"
+nats_stream  = "FLOWGGER"           # auto-created if missing
+nats_threads = 2                    # fan-out publishing workers
+nats_timeout = 30000                # ms to wait for JetStream ACK
+
 ### TLS output
 # type = "tls"
 # connect = [ "172.16.205.128:6514", "172.16.205.129:6514" ]
